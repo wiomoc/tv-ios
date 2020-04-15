@@ -17,7 +17,6 @@
 extern NSString * kxmovieErrorDomain;
 
 typedef enum {
-    
     kxMovieErrorNone,
     kxMovieErrorOpenFile,
     kxMovieErrorStreamInfoNotFound,
@@ -28,27 +27,14 @@ typedef enum {
     kxMovieErroSetupScaler,
     kxMovieErroReSampler,
     kxMovieErroUnsupported,
-    
 } kxMovieError;
 
 typedef enum {
-    
-    KxMovieFrameTypeAudio,
-    KxMovieFrameTypeVideo,
-    KxMovieFrameTypeArtwork,
-    KxMovieFrameTypeSubtitle,
-    
-} KxMovieFrameType;
-
-typedef enum {
-        
     KxVideoFrameFormatRGB,
     KxVideoFrameFormatYUV,
-    
 } KxVideoFrameFormat;
 
 @interface KxMovieFrame : NSObject
-@property (readonly, nonatomic) KxMovieFrameType type;
 @property (readonly, nonatomic) CGFloat position;
 @property (readonly, nonatomic) CGFloat duration;
 @end
@@ -84,6 +70,23 @@ typedef enum {
 @property (readonly, nonatomic, strong) NSString *text;
 @end
 
+@interface EPGEvent : NSObject
+@property (readwrite, nonatomic, strong) NSNumber *eventId;
+@property (readwrite, nonatomic, strong) NSDateInterval *interval;
+@property (readwrite, nonatomic, strong) NSString *name;
+@property (readwrite, nonatomic, strong) NSString *shortDescription;
+@property (readwrite, nonatomic, strong) NSString *longDescription;
+@end
+
+@protocol KxMovieDecoderDelegate
+- (void) addVideoFrame: (KxVideoFrame*) frame;
+- (void) addAudioFrame: (KxAudioFrame*) frame;
+- (void) addArtworkFrame: (KxArtworkFrame*) frame;
+- (void) addSubtitleFrame: (KxSubtitleFrame*) frame;
+- (void) addEPGEvent: (EPGEvent*) event;
+@end
+
+
 typedef BOOL(^KxMovieDecoderInterruptCallback)();
 
 @interface KxMovieDecoder : NSObject
@@ -106,7 +109,6 @@ typedef BOOL(^KxMovieDecoderInterruptCallback)();
 @property (readonly, nonatomic) BOOL validSubtitles;
 @property (readonly, nonatomic, strong) NSDictionary *info;
 @property (readonly, nonatomic, strong) NSString *videoStreamFormatName;
-@property (readonly, nonatomic) BOOL isNetwork;
 @property (readonly, nonatomic) CGFloat startTime;
 @property (readwrite, nonatomic) BOOL disableDeinterlacing;
 @property (readwrite, nonatomic, strong) KxMovieDecoderInterruptCallback interruptCallback;
@@ -117,11 +119,12 @@ typedef BOOL(^KxMovieDecoderInterruptCallback)();
 - (BOOL) openFile: (NSString *) path
             error: (NSError **) perror;
 
--(void) closeFile;
+- (void) closeFile;
 
 - (BOOL) setupVideoFrameFormat: (KxVideoFrameFormat) format;
 
-- (NSArray *) decodeFrames: (CGFloat) minDuration;
+- (void) decodeFrames: (CGFloat) minDuration
+                  delegate: (id<KxMovieDecoderDelegate>) delegate;
 
 @end
 

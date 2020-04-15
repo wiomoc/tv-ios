@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		B90048EE24427EEA006AF6AB /* Player.swift in Sources */ = {isa = PBXBuildFile; fileRef = B90048ED24427EEA006AF6AB /* Player.swift */; };
 		B90048F02442910C006AF6AB /* ProgressBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B90048EF2442910C006AF6AB /* ProgressBar.swift */; };
+		B90049922444961C006AF6AB /* BottomSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B90049912444961C006AF6AB /* BottomSheetView.swift */; };
+		B90049942444D5C9006AF6AB /* EPGEventRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B90049932444D5C8006AF6AB /* EPGEventRow.swift */; };
 		B9A492E22440CC840071DAB4 /* libavformat.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9A492DA2440CC830071DAB4 /* libavformat.framework */; };
 		B9A492E32440CC840071DAB4 /* libavformat.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B9A492DA2440CC830071DAB4 /* libavformat.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B9A492E42440CC840071DAB4 /* libavutil.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9A492DB2440CC830071DAB4 /* libavutil.framework */; };
@@ -71,6 +73,8 @@
 /* Begin PBXFileReference section */
 		B90048ED24427EEA006AF6AB /* Player.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
 		B90048EF2442910C006AF6AB /* ProgressBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBar.swift; sourceTree = "<group>"; };
+		B90049912444961C006AF6AB /* BottomSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomSheetView.swift; sourceTree = "<group>"; };
+		B90049932444D5C8006AF6AB /* EPGEventRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEventRow.swift; sourceTree = "<group>"; };
 		B9A492DA2440CC830071DAB4 /* libavformat.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = libavformat.framework; path = frameworks/libavformat.framework; sourceTree = "<group>"; };
 		B9A492DB2440CC830071DAB4 /* libavutil.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = libavutil.framework; path = frameworks/libavutil.framework; sourceTree = "<group>"; };
 		B9A492DC2440CC840071DAB4 /* libavfilter.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = libavfilter.framework; path = frameworks/libavfilter.framework; sourceTree = "<group>"; };
@@ -166,6 +170,8 @@
 				B9A492FE2440D58D0071DAB4 /* SearchBar.swift */,
 				B90048ED24427EEA006AF6AB /* Player.swift */,
 				B90048EF2442910C006AF6AB /* ProgressBar.swift */,
+				B90049912444961C006AF6AB /* BottomSheetView.swift */,
+				B90049932444D5C8006AF6AB /* EPGEventRow.swift */,
 			);
 			path = tv;
 			sourceTree = "<group>";
@@ -290,6 +296,7 @@
 			files = (
 				B9FB41882440BBCC00EDA27E /* KxMovieGLView.m in Sources */,
 				B9FB41862440BBCC00EDA27E /* KxMovieViewController.m in Sources */,
+				B90049942444D5C9006AF6AB /* EPGEventRow.swift in Sources */,
 				B9E186452440A1D500BF02DC /* ChannelsViewModel.swift in Sources */,
 				B9E186412440924200BF02DC /* ChannelRow.swift in Sources */,
 				B9E186432440928000BF02DC /* Channel.swift in Sources */,
@@ -299,6 +306,7 @@
 				B9E1862D2440914E00BF02DC /* AppDelegate.swift in Sources */,
 				B9FB41872440BBCC00EDA27E /* KxAudioManager.m in Sources */,
 				B9FB41852440BBCC00EDA27E /* KxMovieDecoder.m in Sources */,
+				B90049922444961C006AF6AB /* BottomSheetView.swift in Sources */,
 				B9FB40D42440AD0B00EDA27E /* PlayerWrapper.swift in Sources */,
 				B9E1862F2440914E00BF02DC /* SceneDelegate.swift in Sources */,
 				B9E186312440914E00BF02DC /* ContentView.swift in Sources */,

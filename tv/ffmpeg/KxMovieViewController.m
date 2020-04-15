@@ -23,34 +23,10 @@ NSString * const KxMovieParameterDisableDeinterlacing = @"KxMovieParameterDisabl
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NSString * formatTimeInterval(CGFloat seconds, BOOL isLeft)
-{
-    seconds = MAX(0, seconds);
-    
-    NSInteger s = seconds;
-    NSInteger m = s / 60;
-    NSInteger h = m / 60;
-    
-    s = s % 60;
-    m = m % 60;
-
-    NSMutableString *format = [(isLeft && seconds >= 0.5 ? @"-" : @"") mutableCopy];
-    if (h != 0) [format appendFormat:@"%d:%0.2d", h, m];
-    else        [format appendFormat:@"%d", m];
-    [format appendFormat:@":%0.2d", s];
-
-    return format;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-
 static NSMutableDictionary * gHistory;
 
-#define LOCAL_MIN_BUFFERED_DURATION   0.2
-#define LOCAL_MAX_BUFFERED_DURATION   0.4
-#define NETWORK_MIN_BUFFERED_DURATION 2.0
-#define NETWORK_MAX_BUFFERED_DURATION 4.0
+#define NETWORK_MIN_BUFFERED_DURATION 3.0
+#define NETWORK_MAX_BUFFERED_DURATION 4.5
 
 @interface KxMovieViewController () {
 
@@ -78,7 +54,6 @@ static NSMutableDictionary * gHistory;
     UILabel             *_subtitlesLabel;
     
     UITapGestureRecognizer *_doubleTapGestureRecognizer;
-    UIPanGestureRecognizer *_panGestureRecognizer;
         
 #ifdef DEBUG
     UILabel             *_messageLabel;
@@ -87,14 +62,13 @@ static NSMutableDictionary * gHistory;
     NSDate              *_debugAudioStatusTS;
 #endif
 
-    CGFloat             _bufferedDuration;
+    CGFloat             _videoBufferedDuration;
+    CGFloat             _audioBufferedDuration;
     CGFloat             _minBufferedDuration;
     CGFloat             _maxBufferedDuration;
     BOOL                _buffered;
     
     BOOL                _savedIdleTimer;
-    
-    NSDictionary        *_parameters;
 }
 
 @property (readwrite) BOOL playing;
@@ -113,15 +87,13 @@ static NSMutableDictionary * gHistory;
 - (BOOL)prefersStatusBarHidden { return YES; }
 
 + (id) movieViewControllerWithContentPath: (NSString *) path
-                               parameters: (NSDictionary *) parameters
 {    
     id<KxAudioManager> audioManager = [KxAudioManager audioManager];
     [audioManager activateAudioSession];    
-    return [[KxMovieViewController alloc] initWithContentPath: path parameters: parameters];
+    return [[KxMovieViewController alloc] initWithContentPath: path];
 }
 
 - (id) initWithContentPath: (NSString *) path
-                parameters: (NSDictionary *) parameters
 {
     NSAssert(path.length > 0, @"empty path");
     
@@ -129,8 +101,6 @@ static NSMutableDictionary * gHistory;
     if (self) {
         
         _moviePosition = 0;
-
-        _parameters = parameters;
         
         __weak KxMovieViewController *weakSelf = self;
         
@@ -178,20 +148,19 @@ static NSMutableDictionary * gHistory;
 - (void)loadView
 {
     // LoggerStream(1, @"loadView");
-    CGRect bounds = [[UIScreen mainScreen] applicationFrame];
+    CGRect bounds = [[UIScreen mainScreen] bounds];
     
     self.view = [[UIView alloc] initWithFrame:bounds];
     self.view.backgroundColor = [UIColor blackColor];
     self.view.tintColor = [UIColor blackColor];
 
-    _activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle: UIActivityIndicatorViewStyleWhiteLarge];
+    _activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle: UIActivityIndicatorViewStyleLarge];
     _activityIndicatorView.center = self.view.center;
     _activityIndicatorView.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     
     [self.view addSubview:_activityIndicatorView];
     
     CGFloat width = bounds.size.width;
-    CGFloat height = bounds.size.height;
     
 #ifdef DEBUG
     _messageLabel = [[UILabel alloc] initWithFrame:CGRectMake(20,40,width-40,40)];
@@ -204,8 +173,6 @@ static NSMutableDictionary * gHistory;
     _messageLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self.view addSubview:_messageLabel];
 #endif
-
-
 
     if (_decoder) {
         [self setupPresentView];
@@ -278,14 +245,10 @@ static NSMutableDictionary * gHistory;
     [_activityIndicatorView stopAnimating];
     
     if (_decoder) {
-        
         [self pause];
         
         if (_moviePosition == 0 || _decoder.isEOF)
             [gHistory removeObjectForKey:_decoder.path];
-        else if (!_decoder.isNetwork)
-            [gHistory setValue:[NSNumber numberWithFloat:_moviePosition]
-                        forKey:_decoder.path];
     }
     
         
@@ -305,7 +268,7 @@ static NSMutableDictionary * gHistory;
 
 - (void) applicationWillResignActive: (NSNotification *)notification
 {
-    [self pause];
+   // [self pause];
     
     LoggerStream(1, @"applicationWillResignActive");
 }
@@ -412,40 +375,12 @@ static NSMutableDictionary * gHistory;
             _subtitles = [NSMutableArray array];
         }
     
-        if (_decoder.isNetwork) {
+        _minBufferedDuration = NETWORK_MIN_BUFFERED_DURATION;
+        _maxBufferedDuration = NETWORK_MAX_BUFFERED_DURATION;
             
-            _minBufferedDuration = NETWORK_MIN_BUFFERED_DURATION;
-            _maxBufferedDuration = NETWORK_MAX_BUFFERED_DURATION;
-            
-        } else {
-            
-            _minBufferedDuration = LOCAL_MIN_BUFFERED_DURATION;
-            _maxBufferedDuration = LOCAL_MAX_BUFFERED_DURATION;
-        }
         
         if (!_decoder.validVideo)
             _minBufferedDuration *= 10.0; // increase for audio
-                
-        // allow to tweak some parameters at runtime
-        if (_parameters.count) {
-            
-            id val;
-            
-            val = [_parameters valueForKey: KxMovieParameterMinBufferedDuration];
-            if ([val isKindOfClass:[NSNumber class]])
-                _minBufferedDuration = [val floatValue];
-            
-            val = [_parameters valueForKey: KxMovieParameterMaxBufferedDuration];
-            if ([val isKindOfClass:[NSNumber class]])
-                _maxBufferedDuration = [val floatValue];
-            
-            val = [_parameters valueForKey: KxMovieParameterDisableDeinterlacing];
-            if ([val isKindOfClass:[NSNumber class]])
-                _decoder.disableDeinterlacing = [val boolValue];
-            
-            if (_maxBufferedDuration < _minBufferedDuration)
-                _maxBufferedDuration = _minBufferedDuration * 2;
-        }
         
         LoggerStream(2, @"buffered limit: %.1f - %.1f", _minBufferedDuration, _maxBufferedDuration);
         
@@ -579,6 +514,7 @@ static NSMutableDictionary * gHistory;
 #ifdef DUMP_AUDIO_DATA
                         LoggerAudio(2, @"Audio frame position: %f", frame.position);
 #endif
+                        _audioBufferedDuration -= frame.duration;
                         if (_decoder.validVideo) {
                         
                             const CGFloat delta = _moviePosition - frame.position;
@@ -605,12 +541,9 @@ static NSMutableDictionary * gHistory;
 #endif
                                 continue;
                             }
-                            
                         } else {
-                            
                             [_audioFrames removeObjectAtIndex:0];
                             _moviePosition = frame.position;
-                            _bufferedDuration -= frame.duration;
                         }
                         
                         _currentAudioFramePos = 0;
@@ -675,69 +608,51 @@ static NSMutableDictionary * gHistory;
     }
 }
 
-- (BOOL) addFrames: (NSArray *)frames
+- (void) addVideoFrame: (KxVideoFrame*) frame
 {
-    if (_decoder.validVideo) {
-        
-        @synchronized(_videoFrames) {
-            
-            for (KxMovieFrame *frame in frames)
-                if (frame.type == KxMovieFrameTypeVideo) {
-                    [_videoFrames addObject:frame];
-                    _bufferedDuration += frame.duration;
-                }
-        }
+    @synchronized(_videoFrames) {
+        [_videoFrames addObject:frame];
+        _videoBufferedDuration += frame.duration;
     }
-    
-    if (_decoder.validAudio) {
-        
-        @synchronized(_audioFrames) {
-            
-            for (KxMovieFrame *frame in frames)
-                if (frame.type == KxMovieFrameTypeAudio) {
-                    [_audioFrames addObject:frame];
-                    if (!_decoder.validVideo)
-                        _bufferedDuration += frame.duration;
-                }
-        }
-        
-        if (!_decoder.validVideo) {
-            
-            for (KxMovieFrame *frame in frames)
-                if (frame.type == KxMovieFrameTypeArtwork)
-                    self.artworkFrame = (KxArtworkFrame *)frame;
-        }
+}
+- (void) addAudioFrame: (KxAudioFrame*) frame
+{
+    @synchronized(_audioFrames) {
+        [_audioFrames addObject:frame];
+        _audioBufferedDuration += frame.duration;
     }
-    
-    if (_decoder.validSubtitles) {
-        
-        @synchronized(_subtitles) {
-            
-            for (KxMovieFrame *frame in frames)
-                if (frame.type == KxMovieFrameTypeSubtitle) {
-                    [_subtitles addObject:frame];
-                }
-        }
+}
+- (void) addArtworkFrame: (KxArtworkFrame*) frame
+{
+    if (!_decoder.validVideo) {
+        self.artworkFrame = (KxArtworkFrame *)frame;
     }
-    
-    return self.playing && _bufferedDuration < _maxBufferedDuration;
+}
+- (void) addSubtitleFrame: (KxVideoFrame*) frame
+{
+    @synchronized(_subtitles) {
+        [_subtitles addObject:frame];
+    }
+}
+- (void) addEPGEvent: (EPGEvent*) event
+{
+    __strong id<KxMovieViewControllerDelegate> strongDelegate = self.delegate;
+    if(!strongDelegate) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [strongDelegate newEPGEvent: event];
+    });
 }
 
 - (BOOL) decodeFrames
 {
     //NSAssert(dispatch_get_current_queue() == _dispatchQueue, @"bugcheck");
     
-    NSArray *frames = nil;
-    
     if (_decoder.validVideo ||
         _decoder.validAudio) {
         
-        frames = [_decoder decodeFrames:0];
+        [_decoder decodeFrames:0 delegate: self];
     }
     
-    if (frames.count) {
-        return [self addFrames: frames];
-    }
     return NO;
 }
 
@@ -749,7 +664,7 @@ static NSMutableDictionary * gHistory;
     __weak KxMovieViewController *weakSelf = self;
     __weak KxMovieDecoder *weakDecoder = _decoder;
     
-    const CGFloat duration = _decoder.isNetwork ? .0f : 0.1f;
+    const CGFloat duration = .0f;
     
     self.decoding = YES;
     dispatch_async(_dispatchQueue, ^{
@@ -765,18 +680,12 @@ static NSMutableDictionary * gHistory;
             good = NO;
             
             @autoreleasepool {
-                
                 __strong KxMovieDecoder *decoder = weakDecoder;
-                
-                if (decoder && (decoder.validVideo || decoder.validAudio)) {
-                    
-                    NSArray *frames = [decoder decodeFrames:duration];
-                    if (frames.count) {
-                        
-                        __strong KxMovieViewController *strongSelf = weakSelf;
-                        if (strongSelf)
-                            good = [strongSelf addFrames:frames];
-                    }
+                __strong KxMovieViewController *strongSelf = weakSelf;
+                if (decoder && strongSelf && (decoder.validVideo || decoder.validAudio)) {
+                    [decoder decodeFrames:duration delegate: strongSelf];
+                    good = strongSelf.playing && ((!self->_decoder.validVideo || strongSelf->_videoBufferedDuration < strongSelf->_maxBufferedDuration) ||
+                                                  strongSelf->_audioBufferedDuration < strongSelf->_maxBufferedDuration);
                 }
             }
         }
@@ -790,7 +699,7 @@ static NSMutableDictionary * gHistory;
 
 - (void) tick
 {
-    if (_buffered && ((_bufferedDuration > _minBufferedDuration) || _decoder.isEOF)) {
+    if (_buffered && (((!_decoder.validVideo || _videoBufferedDuration > _minBufferedDuration) && _audioBufferedDuration > _minBufferedDuration) || _decoder.isEOF)) {
         
         _tickCorrectionTime = 0;
         _buffered = NO;
@@ -803,12 +712,9 @@ static NSMutableDictionary * gHistory;
     
     if (self.playing) {
         
-        const NSUInteger leftFrames =
-        (_decoder.validVideo ? _videoFrames.count : 0) +
-        (_decoder.validAudio ? _audioFrames.count : 0);
+        const BOOL noFramesLeft = (_videoFrames.count == 0 && _decoder.validVideo) || (_audioFrames.count == 0 && _decoder.validAudio);
         
-        if (0 == leftFrames) {
-            
+        if (noFramesLeft) {
             if (_decoder.isEOF) {
                 
                 [self pause];
@@ -822,9 +728,9 @@ static NSMutableDictionary * gHistory;
             }
         }
         
-        if (!leftFrames ||
-            !(_bufferedDuration > _minBufferedDuration)) {
-            
+        if (noFramesLeft ||
+            (_decoder.validVideo && _videoBufferedDuration < _minBufferedDuration) ||
+            _audioBufferedDuration < _minBufferedDuration) {
             [self asyncDecodeFrames];
         }
         
@@ -882,7 +788,7 @@ static NSMutableDictionary * gHistory;
                 
                 frame = _videoFrames[0];
                 [_videoFrames removeObjectAtIndex:0];
-                _bufferedDuration -= frame.duration;
+                _videoBufferedDuration -= frame.duration;
             }
         }
         
@@ -1094,7 +1000,8 @@ static NSMutableDictionary * gHistory;
         }
     }
     
-    _bufferedDuration = 0;
+    _videoBufferedDuration = 0;
+    _audioBufferedDuration = 0;
 }
 
 - (void) handleDecoderMovieError: (NSError *) error

@@ -9,20 +9,39 @@
 import SwiftUI
 
 struct Player: View {
-    @State var barHide: Bool = false
+    @State var navigationHidden: Bool = false
     @State var timer = Timer.publish(every: 3, on: .current, in: .common)
 
     @State var sliderValue = 0.5
+    @State var events = [EPGEvent]()
+    @State private var bottomSheetShown = false
+
 
     var channel: Channel
 
     var body: some View {
-        VStack {
-            PlayerWrapper(channel: channel, hidden: $barHide)
+        ZStack {
+            PlayerWrapper(channel: channel, navigationHidden: $navigationHidden, events: $events)
+                .onTapGesture(count: 2) { /* XXX handled in KMovieViewController */ }
+                .onTapGesture(count: 1) {
+                    if(self.navigationHidden) {
+                        self.navigationHidden = false
+                        self.timer = Timer.publish (every: 3, on: .current, in: .common)
+                        self.timer.connect()
+                    } else {
+                        self.navigationHidden = true
+                        self.timer.connect().cancel()
+                    }
+            }
+            BottomSheetView(isOpen: $bottomSheetShown, maxHeight: 600) {
+                List(events.filter{$0.interval.end.compare(Date()) == .orderedDescending}, id: \.eventId) { event in
+                    EPGEventRow(event)
+                }
+                .disabled(!bottomSheetShown)
+            }
         }
             .navigationBarTitle("")
             .navigationBarItems(trailing: ProgressBar(currentProgress: CGFloat(sliderValue)))
-            .statusBar(hidden: true)
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .background(Color.black)
             .edgesIgnoringSafeArea(.all)
@@ -30,18 +49,8 @@ struct Player: View {
                 self.timer.connect()
             }
             .onReceive(timer) { _ in
-                self.barHide = true
+                self.navigationHidden = true
                 self.timer.connect().cancel()
-            }
-            .onTapGesture {
-                if(self.barHide) {
-                    self.barHide = false
-                    self.timer = Timer.publish (every: 3, on: .current, in: .common)
-                    self.timer.connect()
-                } else {
-                    self.barHide = true
-                    self.timer.connect().cancel()
-                }
         }
 
     }

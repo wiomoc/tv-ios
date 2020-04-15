@@ -10,19 +10,19 @@
 //  KxMovie is licenced under the LGPL v3, see lgpl-3.0.txt
 
 #import <UIKit/UIKit.h>
+#import "KxMovieDecoder.h"
 
-@class KxMovieDecoder;
+@protocol KxMovieViewControllerDelegate
+- (void) newEPGEvent: (EPGEvent*) event;
+@end
 
-extern NSString * const KxMovieParameterMinBufferedDuration;    // Float
-extern NSString * const KxMovieParameterMaxBufferedDuration;    // Float
-extern NSString * const KxMovieParameterDisableDeinterlacing;   // BOOL
 
-@interface KxMovieViewController : UIViewController
+@interface KxMovieViewController : UIViewController<KxMovieDecoderDelegate>
 
-+ (id) movieViewControllerWithContentPath: (NSString *) path
-                               parameters: (NSDictionary *) parameters;
++ (id) movieViewControllerWithContentPath: (NSString *) path;
 
 @property (readonly) BOOL playing;
+@property (readwrite, weak) id<KxMovieViewControllerDelegate> delegate;
 
 - (void) play;
 

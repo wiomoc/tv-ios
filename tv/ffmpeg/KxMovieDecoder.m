@@ -22,6 +22,8 @@
 #import "libavfilter/buffersrc.h"
 #import "libavfilter/buffersink.h"
 #include "libavutil/crc.h"
+#include <iconv.h>
+#include <CoreFoundation/CFStringEncodingExt.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 NSString * kxmovieErrorDomain = @"ru.kolyvan.kxmovie";
@@ -93,132 +95,6 @@ static BOOL audioCodecIsSupported(AVCodecContext *audio)
     return NO;
 }
 
-#ifdef DEBUG
-static void fillSignal(SInt16 *outData,  UInt32 numFrames, UInt32 numChannels)
-{
-    static float phase = 0.0;
-    
-    for (int i=0; i < numFrames; ++i)
-    {
-        for (int iChannel = 0; iChannel < numChannels; ++iChannel)
-        {
-            float theta = phase * M_PI * 2;
-            outData[i*numChannels + iChannel] = sin(theta) * (float)INT16_MAX;
-        }
-        phase += 1.0 / (44100 / 440.0);
-        if (phase > 1.0) phase = -1;
-    }
-}
-
-static void fillSignalF(float *outData,  UInt32 numFrames, UInt32 numChannels)
-{
-    static float phase = 0.0;
-    
-    for (int i=0; i < numFrames; ++i)
-    {
-        for (int iChannel = 0; iChannel < numChannels; ++iChannel)
-        {
-            float theta = phase * M_PI * 2;
-            outData[i*numChannels + iChannel] = sin(theta);
-        }
-        phase += 1.0 / (44100 / 440.0);
-        if (phase > 1.0) phase = -1;
-    }
-}
-
-static void testConvertYUV420pToRGB(AVFrame * frame, uint8_t *outbuf, int linesize, int height)
-{
-    const int linesizeY = frame->linesize[0];
-    const int linesizeU = frame->linesize[1];
-    const int linesizeV = frame->linesize[2];
-    
-    assert(height == frame->height);
-    assert(linesize  <= linesizeY * 3);
-    assert(linesizeY == linesizeU * 2);
-    assert(linesizeY == linesizeV * 2);
-    
-    uint8_t *pY = frame->data[0];
-    uint8_t *pU = frame->data[1];
-    uint8_t *pV = frame->data[2];
-    
-    const int width = linesize / 3;
-    
-    for (int y = 0; y < height; y += 2) {
-        
-        uint8_t *dst1 = outbuf + y       * linesize;
-        uint8_t *dst2 = outbuf + (y + 1) * linesize;
-        
-        uint8_t *py1  = pY  +  y       * linesizeY;
-        uint8_t *py2  = py1 +            linesizeY;
-        uint8_t *pu   = pU  + (y >> 1) * linesizeU;
-        uint8_t *pv   = pV  + (y >> 1) * linesizeV;
-        
-        for (int i = 0; i < width; i += 2) {
-            
-            int Y1 = py1[i];
-            int Y2 = py2[i];
-            int Y3 = py1[i+1];
-            int Y4 = py2[i+1];
-            
-            int U = pu[(i >> 1)] - 128;
-            int V = pv[(i >> 1)] - 128;
-            
-            int dr = (int)(             1.402f * V);
-            int dg = (int)(0.344f * U + 0.714f * V);
-            int db = (int)(1.772f * U);
-            
-            int r1 = Y1 + dr;
-            int g1 = Y1 - dg;
-            int b1 = Y1 + db;
-            
-            int r2 = Y2 + dr;
-            int g2 = Y2 - dg;
-            int b2 = Y2 + db;
-            
-            int r3 = Y3 + dr;
-            int g3 = Y3 - dg;
-            int b3 = Y3 + db;
-            
-            int r4 = Y4 + dr;
-            int g4 = Y4 - dg;
-            int b4 = Y4 + db;
-            
-            r1 = r1 > 255 ? 255 : r1 < 0 ? 0 : r1;
-            g1 = g1 > 255 ? 255 : g1 < 0 ? 0 : g1;
-            b1 = b1 > 255 ? 255 : b1 < 0 ? 0 : b1;
-            
-            r2 = r2 > 255 ? 255 : r2 < 0 ? 0 : r2;
-            g2 = g2 > 255 ? 255 : g2 < 0 ? 0 : g2;
-            b2 = b2 > 255 ? 255 : b2 < 0 ? 0 : b2;
-            
-            r3 = r3 > 255 ? 255 : r3 < 0 ? 0 : r3;
-            g3 = g3 > 255 ? 255 : g3 < 0 ? 0 : g3;
-            b3 = b3 > 255 ? 255 : b3 < 0 ? 0 : b3;
-            
-            r4 = r4 > 255 ? 255 : r4 < 0 ? 0 : r4;
-            g4 = g4 > 255 ? 255 : g4 < 0 ? 0 : g4;
-            b4 = b4 > 255 ? 255 : b4 < 0 ? 0 : b4;
-            
-            dst1[3*i + 0] = r1;
-            dst1[3*i + 1] = g1;
-            dst1[3*i + 2] = b1;
-            
-            dst2[3*i + 0] = r2;
-            dst2[3*i + 1] = g2;
-            dst2[3*i + 2] = b2;
-            
-            dst1[3*i + 3] = r3;
-            dst1[3*i + 4] = g3;
-            dst1[3*i + 5] = b3;
-            
-            dst2[3*i + 3] = r4;
-            dst2[3*i + 4] = g4;
-            dst2[3*i + 5] = b4;            
-        }
-    }
-}
-#endif
-
 static void avStreamFPSTimeBase(AVStream *st, CGFloat defaultTimeBase, CGFloat *pFPS, CGFloat *pTimeBase)
 {
     CGFloat fps, timebase;
@@ -278,17 +154,6 @@ static NSData * copyFrameData(UInt8 *src, int linesize, int width, int height)
     return md;
 }
 
-static BOOL isNetworkPath (NSString *path)
-{
-    NSRange r = [path rangeOfString:@":"];
-    if (r.location == NSNotFound)
-        return NO;
-    NSString *scheme = [path substringToIndex:r.length];
-    if ([scheme isEqualToString:@"file"])
-        return NO;
-    return YES;
-}
-
 static int interrupt_callback(void *ctx);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -306,7 +171,6 @@ static int interrupt_callback(void *ctx);
 @end
 
 @implementation KxAudioFrame
-- (KxMovieFrameType) type { return KxMovieFrameTypeAudio; }
 @end
 
 @interface KxVideoFrame()
@@ -315,7 +179,6 @@ static int interrupt_callback(void *ctx);
 @end
 
 @implementation KxVideoFrame
-- (KxMovieFrameType) type { return KxMovieFrameTypeVideo; }
 @end
 
 @interface KxVideoFrameRGB ()
@@ -373,7 +236,6 @@ static int interrupt_callback(void *ctx);
 @end
 
 @implementation KxArtworkFrame
-- (KxMovieFrameType) type { return KxMovieFrameTypeArtwork; }
 - (UIImage *) asImage
 {
     UIImage *image = nil;
@@ -403,7 +265,9 @@ static int interrupt_callback(void *ctx);
 @end
 
 @implementation KxSubtitleFrame
-- (KxMovieFrameType) type { return KxMovieFrameTypeSubtitle; }
+@end
+
+@implementation EPGEvent
 @end
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -432,13 +296,14 @@ static int interrupt_callback(void *ctx);
     SwrContext          *_swrContext;
     void                *_swrBuffer;
     NSUInteger          _swrBufferSize;
-    NSDictionary        *_info;
     KxVideoFrameFormat  _videoFrameFormat;
     NSUInteger          _artworkStream;
     NSInteger           _subtitleASSEvents;
+    NSMutableDictionary *_epgEvents;
     
-    AVFilterContext     *buffersrc_ctx;
-    AVFilterContext     *buffersink_ctx;
+    AVFilterContext     *_buffersrc_ctx;
+    AVFilterContext     *_buffersink_ctx;
+    AVFilterGraph       *_filter_graph;
 }
 @end
 
@@ -580,117 +445,6 @@ static int interrupt_callback(void *ctx);
     return _subtitleStream != -1;
 }
 
-- (NSDictionary *) info
-{
-    if (!_info) {
-        
-        NSMutableDictionary *md = [NSMutableDictionary dictionary];
-        
-        if (_formatCtx) {
-        
-            const char *formatName = _formatCtx->iformat->name;
-            [md setValue: [NSString stringWithCString:formatName encoding:NSUTF8StringEncoding]
-                  forKey: @"format"];
-            
-            if (_formatCtx->bit_rate) {
-                
-                [md setValue: [NSNumber numberWithInt:_formatCtx->bit_rate]
-                      forKey: @"bitrate"];
-            }
-            
-            if (_formatCtx->metadata) {
-                
-                NSMutableDictionary *md1 = [NSMutableDictionary dictionary];
-                
-                AVDictionaryEntry *tag = NULL;
-                 while((tag = av_dict_get(_formatCtx->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
-                     
-                     [md1 setValue: [NSString stringWithCString:tag->value encoding:NSUTF8StringEncoding]
-                            forKey: [NSString stringWithCString:tag->key encoding:NSUTF8StringEncoding]];
-                 }
-                
-                [md setValue: [md1 copy] forKey: @"metadata"];
-            }
-        
-            char buf[256];
-            
-            if (_videoStreams.count) {
-                NSMutableArray *ma = [NSMutableArray array];
-                for (NSNumber *n in _videoStreams) {
-                    AVStream *st = _formatCtx->streams[n.integerValue];
-                    avcodec_string(buf, sizeof(buf), st->codec, 1);
-                    NSString *s = [NSString stringWithCString:buf encoding:NSUTF8StringEncoding];
-                    if ([s hasPrefix:@"Video: "])
-                        s = [s substringFromIndex:@"Video: ".length];
-                    [ma addObject:s];
-                }
-                md[@"video"] = ma.copy;
-            }
-            
-            if (_audioStreams.count) {
-                NSMutableArray *ma = [NSMutableArray array];
-                for (NSNumber *n in _audioStreams) {
-                    AVStream *st = _formatCtx->streams[n.integerValue];
-                    
-                    NSMutableString *ms = [NSMutableString string];
-                    AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL, 0);
-                    if (lang && lang->value) {
-                        [ms appendFormat:@"%s ", lang->value];
-                    }
-                    
-                    avcodec_string(buf, sizeof(buf), st->codec, 1);
-                    NSString *s = [NSString stringWithCString:buf encoding:NSUTF8StringEncoding];
-                    if ([s hasPrefix:@"Audio: "])
-                        s = [s substringFromIndex:@"Audio: ".length];
-                    [ms appendString:s];
-                    
-                    [ma addObject:ms.copy];
-                }                
-                md[@"audio"] = ma.copy;
-            }
-            
-            if (_subtitleStreams.count) {
-                NSMutableArray *ma = [NSMutableArray array];
-                for (NSNumber *n in _subtitleStreams) {
-                    AVStream *st = _formatCtx->streams[n.integerValue];
-                    
-                    NSMutableString *ms = [NSMutableString string];
-                    AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL, 0);
-                    if (lang && lang->value) {
-                        [ms appendFormat:@"%s ", lang->value];
-                    }
-                    
-                    avcodec_string(buf, sizeof(buf), st->codec, 1);
-                    NSString *s = [NSString stringWithCString:buf encoding:NSUTF8StringEncoding];
-                    if ([s hasPrefix:@"Subtitle: "])
-                        s = [s substringFromIndex:@"Subtitle: ".length];
-                    [ms appendString:s];
-                    
-                    [ma addObject:ms.copy];
-                }               
-                md[@"subtitles"] = ma.copy;
-            }
-            
-        }
-                
-        _info = [md copy];
-    }
-    
-    return _info;
-}
-
-- (NSString *) videoStreamFormatName
-{
-    if (!_videoCodecCtx)
-        return nil;
-    
-    if (_videoCodecCtx->pix_fmt == AV_PIX_FMT_NONE)
-        return @"";
-    
-    const char *name = av_get_pix_fmt_name(_videoCodecCtx->pix_fmt);
-    return name ? [NSString stringWithCString:name encoding:NSUTF8StringEncoding] : @"?";
-}
-
 - (CGFloat) startTime
 {
     if (_videoStream != -1) {
@@ -744,15 +498,6 @@ static int interrupt_callback(void *ctx);
     NSAssert(path, @"nil path");
     NSAssert(!_formatCtx, @"already open");
     
-    _isNetwork = isNetworkPath(path);
-    
-    static BOOL needNetworkInit = YES;
-    if (needNetworkInit && _isNetwork) {
-        
-        needNetworkInit = NO;
-        avformat_network_init();
-    }
-    
     _path = path;
     
     kxMovieError errCode = [self openInput: path];
@@ -762,6 +507,7 @@ static int interrupt_callback(void *ctx);
         kxMovieError videoErr = [self openVideoStream];
         kxMovieError audioErr = [self openAudioStream];
         _epgStream = findEPGStream(_formatCtx);
+        _epgEvents = [[NSMutableDictionary alloc] init];
         
         _subtitleStream = -1;
         
@@ -890,34 +636,39 @@ static int interrupt_callback(void *ctx);
     LoggerVideo(1, @"video start time %f", st->start_time * _videoTimeBase);
     LoggerVideo(1, @"video disposition %d", st->disposition);
     
+    return kxMovieErrorNone;
+}
+
+- (void) initializeDeinterlacing
+{
     const AVFilter *buffersrc = avfilter_get_by_name("buffer");
     const AVFilter* yadif = avfilter_get_by_name("yadif");
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
        
+    
     AVFilterContext *yadif_ctx;
        
-    AVFilterGraph* filter_graph = avfilter_graph_alloc();
-    enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
+    _filter_graph = avfilter_graph_alloc();
     
     char args[512];
+    
+    AVCodecContext* codecCtx = _videoCodecCtx;
 
     snprintf(args, sizeof(args), "%d:%d:%d:%d:%d:%d:%d",
             codecCtx->width, codecCtx->height, codecCtx->pix_fmt,
             codecCtx->time_base.num, codecCtx->time_base.den,
             codecCtx->sample_aspect_ratio.num, codecCtx->sample_aspect_ratio.den);
     
-    avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in", args, NULL, filter_graph);
-    avfilter_graph_create_filter(&yadif_ctx, yadif, "yadif", NULL, NULL, filter_graph);
-    avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out", NULL, NULL, filter_graph);
-    if(buffersrc_ctx && buffersink_ctx) {
-        avfilter_link(buffersrc_ctx, 0, yadif_ctx, 0);
-        avfilter_link(yadif_ctx, 0, buffersink_ctx, 0);
-        if( avfilter_graph_config(filter_graph, NULL) < 0 ) {
+    avfilter_graph_create_filter(&_buffersrc_ctx, buffersrc, "in", args, NULL, _filter_graph);
+    avfilter_graph_create_filter(&yadif_ctx, yadif, "yadif", NULL, NULL, _filter_graph);
+    avfilter_graph_create_filter(&_buffersink_ctx, buffersink, "out", NULL, NULL, _filter_graph);
+    if(_buffersrc_ctx && _buffersink_ctx) {
+        avfilter_link(_buffersrc_ctx, 0, yadif_ctx, 0);
+        avfilter_link(yadif_ctx, 0, _buffersink_ctx, 0);
+        if( avfilter_graph_config(_filter_graph, NULL) < 0 ) {
             av_log(NULL, AV_LOG_ERROR, "error configuring the filter graph\n");
         }
     }
-    
-    return kxMovieErrorNone;
 }
 
 - (kxMovieError) openAudioStream
@@ -1059,6 +810,10 @@ static int interrupt_callback(void *ctx);
         
         avformat_close_input(&_formatCtx);
         _formatCtx = NULL;
+    }
+    
+    if(_buffersrc_ctx) {
+        avfilter_graph_free(&_filter_graph);
     }
 }
 
@@ -1397,16 +1152,35 @@ uint16_t decode_short(uint8_t* data) {
     return msb << 8 | lsb;
 }
 
-void read_string(uint8_t** data, uint8_t* end) {
+NSString* read_string(uint8_t** data, uint8_t* end) {
     uint8_t *data_ptr = *data;
     uint8_t name_length = *data_ptr++;
-    char* buf = malloc(name_length + 1);
-    memcpy(buf, data_ptr, name_length);
-    buf[name_length] = 0;
+    
+    CFStringRef string;
+    if(*data_ptr < 0x20) {
+        CFStringEncoding encoding = kCFStringEncodingISOLatin1;
+        switch (*data_ptr) {
+            case 0x01: encoding = kCFStringEncodingISOLatinCyrillic; break;
+            case 0x02: encoding = kCFStringEncodingISOLatinArabic; break;
+            case 0x03: encoding = kCFStringEncodingISOLatinGreek; break;
+            case 0x04: encoding = kCFStringEncodingISOLatinHebrew; break;
+            case 0x05: encoding = kCFStringEncodingISOLatin5; break;
+            case 0x06: encoding = kCFStringEncodingISOLatin6; break;
+            case 0x07: encoding = kCFStringEncodingISOLatinThai; break;
+            case 0x09: encoding = kCFStringEncodingISOLatin7; break;
+            case 0x0A: encoding = kCFStringEncodingISOLatin8; break;
+            case 0x0B: encoding = kCFStringEncodingISOLatin9; break;
+            case 0x13: encoding = kCFStringEncodingGB_2312_80; break;
+            case 0x15: encoding = kCFStringEncodingUTF8; break;
+        }
+        string = CFStringCreateWithBytes(NULL, data_ptr + 1, name_length - 1, encoding, false);
+    } else {
+        string = CFStringCreateWithBytes(NULL, data_ptr, name_length, kCFStringEncodingISOLatin1, false);
+    }
+    
     data_ptr += name_length;
-   // printf("NAME: %s\n" , buf);
-    free(buf);
     *data = data_ptr;
+    return (__bridge NSString *)(string);
 }
 
 #pragma mark - public
@@ -1425,13 +1199,132 @@ void read_string(uint8_t** data, uint8_t* end) {
     return _videoFrameFormat == format;
 }
 
-- (NSArray *) decodeFrames: (CGFloat) minDuration
+- (void) handleEPGPacket: (AVPacket*) packet delagate: (id<KxMovieDecoderDelegate>) delegate
+{
+    uint8_t* data = packet->data;
+    uint8_t table_id = data[0];
+    if(packet->size >= 14 && (table_id == 0x4E || (table_id >= 0x50 && table_id <= 0x54))) {
+        uint16_t section_length = decode_short(&data[1]) & 0x0FFF;
+        if(section_length > packet->size) return;
+                   
+        data += 14;
+        int32_t remaining_section_length = section_length - 13;
+        while(remaining_section_length > 16) { // At least 12 bytes + crc32
+            remaining_section_length -= 12;
+                       
+            uint16_t event_id = decode_short(data);
+            NSNumber *eventId = [NSNumber numberWithShort: event_id];
+            if([_epgEvents objectForKey: eventId]) {
+                data += 8;
+                uint16_t descriptors_length = decode_short(data) % 0x0FFF;
+                data += 2;
+                data += descriptors_length;
+                remaining_section_length -= descriptors_length;
+                continue;
+            }
+            data += 2;
+            uint16_t MJD = decode_short(data);
+            data += 2;
+                       
+            uint32_t Ys = ((MJD - 15078.2) / 365.25);
+            uint32_t tmp = (Ys * 365.25);
+            uint32_t Ms = ((MJD - 14956.1 - tmp) / 30.6001);
+            uint32_t tmp1 = (Ys * 365.25);
+            uint32_t tmp2 = (Ms * 30.6001);
+            uint32_t startTimeDay = MJD - 14956 - tmp1 - tmp2;
+            uint32_t K = (Ms == 14 || Ms == 15)? 1 : 0;
+            uint32_t startTimeYear = 1900 + Ys + K;
+            uint32_t startTimeMonth = Ms - 1 - K * 12;
+            
+            uint8_t startTimeHour = decode_bcd(*data++);
+            uint8_t startTimeMinute = decode_bcd(*data++);
+            uint8_t startTimeSecond = decode_bcd(*data++);
+            
+            NSDateComponents *dateComponents = [[NSDateComponents alloc] init];
+            dateComponents.timeZone = [NSTimeZone timeZoneForSecondsFromGMT: 0];
+            dateComponents.calendar = [NSCalendar calendarWithIdentifier: NSCalendarIdentifierGregorian];
+            dateComponents.year = startTimeYear;
+            dateComponents.month = startTimeMonth;
+            dateComponents.day = startTimeDay;
+            dateComponents.hour = startTimeHour;
+            dateComponents.minute = startTimeMinute;
+            dateComponents.second = startTimeSecond;
+            
+            
+            uint32_t duration = decode_bcd(*data++) * 3600;
+            duration += decode_bcd(*data++) * 60;
+            duration += decode_bcd(*data++);
+            
+            NSDateInterval *interval = [[NSDateInterval alloc] initWithStartDate:dateComponents.date duration: duration];
+            NSLog(@"Date: %@", interval);
+            
+            printf("Event: %d Date: %02d.%02d.%02d %02d:%02d %d\n", event_id, startTimeDay, startTimeMonth, startTimeYear, startTimeHour, startTimeMinute, duration);
+            
+            int32_t descriptors_length = decode_short(data) & 0x0FFF;
+            data += 2;
+            
+            remaining_section_length -= descriptors_length;
+            uint8_t* descriptors_end = data + descriptors_length;
+            if(remaining_section_length < 4) break;
+            NSString *name;
+            NSString *shortDescription;
+            NSMutableString *longDescription = [[NSMutableString alloc] initWithCapacity: 0];
+            while(descriptors_end > data) {
+                uint8_t descriptor_tag = *data++;
+                uint8_t descriptor_length = *data++;
+                uint8_t *descriptor_end = data + descriptor_length;
+                if(descriptors_end < descriptor_end) {
+                    return;
+                }
+                
+                switch (descriptor_tag) {
+                    case 0x4d:
+                        data += 3;
+                        name = read_string(&data, descriptor_end);
+                        shortDescription = read_string(&data, descriptor_end);
+                        break;
+                    case 0x4e:
+                        data += 4;
+                        uint8_t items_length_remaining = *data++;
+                        while (items_length_remaining > 0) {
+                            uint8_t item_description_length = *data++;
+                            data += item_description_length;
+                            
+                            uint8_t item_length = *data++;
+                            data += item_description_length;
+                            items_length_remaining -= 2;
+                            items_length_remaining -= item_description_length;
+                            items_length_remaining -= item_length;
+                        }
+                        
+                        [longDescription appendString: read_string(&data, descriptor_end)];
+                        break;
+                    default:
+                        data += descriptor_length;
+                        break;
+                }
+            }
+            if(name) {
+                EPGEvent *event = [[EPGEvent alloc] init];
+                event.eventId = eventId;
+                event.interval = interval;
+                event.name = name;
+                event.shortDescription = shortDescription;
+                event.longDescription = longDescription;
+                
+                [_epgEvents setObject: event forKey: eventId];
+                [delegate addEPGEvent: event];
+            }
+        }
+    }
+}
+
+- (void) decodeFrames: (CGFloat) minDuration
+                  delegate: (id<KxMovieDecoderDelegate>) delegate;
 {
     if (_videoStream == -1 &&
         _audioStream == -1)
-        return nil;
-
-    NSMutableArray *result = [NSMutableArray array];
+        return;
     
     AVPacket packet;
     
@@ -1465,19 +1358,19 @@ void read_string(uint8_t** data, uint8_t* end) {
                 
                 if (gotframe) {
                     
-                    if (_videoFrame->interlaced_frame && buffersrc_ctx) {
-                        int err = av_buffersrc_write_frame(buffersrc_ctx, _videoFrame);
+                    if (_videoFrame->interlaced_frame) {
+                        if(!_filter_graph) [self initializeDeinterlacing];
+                        int err = av_buffersrc_write_frame(_buffersrc_ctx, _videoFrame);
                         if (err < 0) {
                             av_log(NULL, AV_LOG_ERROR, "error writing frame to buffersrc\n");
                         }
                         for (;;) {
-                            int err = av_buffersink_get_frame(buffersink_ctx, _videoFrame);
+                            int err = av_buffersink_get_frame(_buffersink_ctx, _videoFrame);
                             if (err == AVERROR_EOF || err == AVERROR(EAGAIN))
                                 break;
                             KxVideoFrame *frame = [self handleVideoFrame];
                             if (frame) {
-                                [result addObject:frame];
-                                
+                                [delegate addVideoFrame: frame];
                                 _position = frame.position;
                                 decodedDuration += frame.duration;
                                 if (decodedDuration > minDuration)
@@ -1487,8 +1380,7 @@ void read_string(uint8_t** data, uint8_t* end) {
                     } else {
                         KxVideoFrame *frame = [self handleVideoFrame];
                         if (frame) {
-                            [result addObject:frame];
-                            
+                             [delegate addVideoFrame: frame];
                             _position = frame.position;
                             decodedDuration += frame.duration;
                             if (decodedDuration > minDuration)
@@ -1525,7 +1417,7 @@ void read_string(uint8_t** data, uint8_t* end) {
                     KxAudioFrame * frame = [self handleAudioFrame];
                     if (frame) {
                         
-                        [result addObject:frame];
+                         [delegate addAudioFrame: frame];
                                                 
                         if (_videoStream == -1) {
                             
@@ -1549,7 +1441,7 @@ void read_string(uint8_t** data, uint8_t* end) {
 
                 KxArtworkFrame *frame = [[KxArtworkFrame alloc] init];
                 frame.picture = [NSData dataWithBytes:packet.data length:packet.size];
-                [result addObject:frame];
+                [delegate addArtworkFrame: frame];
             }
             
         } else if (packet.stream_index == _subtitleStream) {
@@ -1574,7 +1466,7 @@ void read_string(uint8_t** data, uint8_t* end) {
                     
                     KxSubtitleFrame *frame = [self handleSubtitle: &subtitle];
                     if (frame) {
-                        [result addObject:frame];
+                         [delegate addSubtitleFrame: frame];
                     }
                     avsubtitle_free(&subtitle);
                 }
@@ -1586,93 +1478,11 @@ void read_string(uint8_t** data, uint8_t* end) {
             }
         } else if(packet.stream_index == _epgStream &&
                   !av_crc(av_crc_get_table(AV_CRC_32_IEEE), -1, packet.data, packet.size)) {
-            uint8_t* data = packet.data;
-            uint8_t table_id = data[0];
-            if(packet.size >= 14 && (table_id == 0x4E || table_id == 0x50)) {
-                uint16_t section_length = decode_short(&data[1]) & 0x0FFF;
-                
-                data += 14;
-                int32_t remaining_section_length = section_length - 13;
-                while(remaining_section_length > 4) { // At least 12 bytes + crc32
-                    remaining_section_length -= 12;
-                    
-                    uint16_t event_id = decode_short(data);
-                    data += 2;
-                    uint16_t MJD = decode_short(data);
-                    data += 2;
-                    
-                    uint32_t Ys = ((MJD - 15078.2) / 365.25);
-                    uint32_t tmp = (Ys * 365.25);
-                    uint32_t Ms = ((MJD - 14956.1 - tmp) / 30.6001);
-                    uint32_t tmp1 = (Ys * 365.25);
-                    uint32_t tmp2 = (Ms * 30.6001);
-                    uint32_t startTimeDay = MJD - 14956 - tmp1 - tmp2;
-                    uint32_t K = (Ms == 14 || Ms == 15)? 1 : 0;
-                    uint32_t startTimeYear = 1900 + Ys + K;
-                    uint32_t startTimeMonth = Ms - 1 - K * 12;
-                    
-                    uint8_t startTimeHour = decode_bcd(*data++);
-                    uint8_t startTimeSecond = decode_bcd(*data++);
-                    uint8_t startTimeMinute = decode_bcd(*data++);
-                    
-                    uint32_t duration = decode_bcd(*data++) * 3600 +
-                                        decode_bcd(*data++) * 60 +
-                                        decode_bcd(*data++);
-                    
-                    printf("Event: %d Date: %02d.%02d.%02d %02d:%02d %d\n", event_id, startTimeDay, startTimeMonth, startTimeYear, startTimeHour, startTimeMinute, duration);
-                    
-                    int32_t descriptors_length = decode_short(data) & 0x0FFF;
-                    data += 2;
-
-                    remaining_section_length -= descriptors_length;
-                    uint8_t* descriptors_end = data + descriptors_length;
-                    if(remaining_section_length < 4) break;
-                    while(descriptors_end > data) {
-                        uint8_t descriptor_tag = *data++;
-                        uint8_t descriptor_length = *data++;
-                        uint8_t *descriptor_end = data + descriptor_length;
-                        if(descriptors_end < descriptor_end) {
-                            break;
-                        }
-                        
-                        
-                        switch (descriptor_tag) {
-                            case 0x4d:
-                                data += 3;
-                                read_string(&data, descriptor_end);
-                                read_string(&data, descriptor_end);
-                                break;
-                            case 0x4e:
-                                data += 4;
-                                uint8_t items_length_remaining = *data++;
-                                while (items_length_remaining > 0) {
-                                    uint8_t item_description_length = *data++;
-                                    data += item_description_length;
-
-                                    uint8_t item_length = *data++;
-                                    data += item_description_length;
-                                    items_length_remaining -= 2;
-                                    items_length_remaining -= item_description_length;
-                                    items_length_remaining -= item_length;
-
-                                    //Log.d("EIT", "item $itemDescription ; $item ")
-                                }
-                                read_string(&data, descriptor_end);
-                            break;
-                            default:
-                                data += descriptor_length;
-                                break;
-                        }
-                    }
-                }
-                //printf("GOT EPG %d %hhx\n", packet.size, *packet.data);
-            }
+            [self handleEPGPacket: &packet delagate: delegate];
         }
 
         av_free_packet(&packet);
 	}
-
-    return result;
 }
 
 @end
