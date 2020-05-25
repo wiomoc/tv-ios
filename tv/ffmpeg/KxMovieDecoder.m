@@ -1203,7 +1203,7 @@ NSString* read_string(uint8_t** data, uint8_t* end) {
 {
     uint8_t* data = packet->data;
     uint8_t table_id = data[0];
-    if(packet->size >= 14 && (table_id == 0x4E || (table_id >= 0x50 && table_id <= 0x54))) {
+    if(packet->size >= 14 && (table_id == 0x4E || (table_id >= 0x50 && table_id <= 0x55))) {
         uint16_t section_length = decode_short(&data[1]) & 0x0FFF;
         if(section_length > packet->size) return;
                    
@@ -1256,7 +1256,6 @@ NSString* read_string(uint8_t** data, uint8_t* end) {
             duration += decode_bcd(*data++);
             
             NSDateInterval *interval = [[NSDateInterval alloc] initWithStartDate:dateComponents.date duration: duration];
-            NSLog(@"Date: %@", interval);
             
             printf("Event: %d Date: %02d.%02d.%02d %02d:%02d %d\n", event_id, startTimeDay, startTimeMonth, startTimeYear, startTimeHour, startTimeMinute, duration);
             

@@ -456,6 +456,7 @@
 				);
 				"HEADER_SEARCH_PATHS[arch=*]" = "/Users/christophwalcher/Documents/DEV/XCode/tv/mobile-ffmpeg-full-universal/include/**";
 				INFOPLIST_FILE = tv/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -484,6 +485,7 @@
 					"$(PROJECT_DIR)/frameworks",
 				);
 				INFOPLIST_FILE = tv/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

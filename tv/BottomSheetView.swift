@@ -11,20 +11,20 @@ fileprivate enum Constants {
     static let indicatorHeight: CGFloat = 6
     static let indicatorWidth: CGFloat = 60
     static let snapRatio: CGFloat = 0.25
-    static let minHeightRatio: CGFloat = 0.3
+    static let minHeightRatio: CGFloat = 0.45
 }
 
 struct BottomSheetView<Content: View>: View {
     @Binding var isOpen: Bool
 
-    let maxHeight: CGFloat
-    let minHeight: CGFloat
+    let minHeightRatio: CGFloat
+    let maxHeightRatio: CGFloat
     let content: Content
 
     @GestureState private var translation: CGFloat = 0
 
-    private var offset: CGFloat {
-        isOpen ? 0 : maxHeight - minHeight
+    private var offsetRatio: CGFloat {
+        isOpen ? 0 : maxHeightRatio - minHeightRatio
     }
 
     private var indicator: some View {
@@ -38,9 +38,9 @@ struct BottomSheetView<Content: View>: View {
         }
     }
 
-    init(isOpen: Binding<Bool>, maxHeight: CGFloat, @ViewBuilder content: () -> Content) {
-        self.minHeight = maxHeight * Constants.minHeightRatio
-        self.maxHeight = maxHeight
+    init(isOpen: Binding<Bool>, maxHeightRatio: CGFloat, @ViewBuilder content: () -> Content) {
+        self.minHeightRatio = maxHeightRatio - Constants.minHeightRatio
+        self.maxHeightRatio = maxHeightRatio
         self.content = content()
         self._isOpen = isOpen
     }
@@ -51,17 +51,17 @@ struct BottomSheetView<Content: View>: View {
                 self.indicator.padding()
                 self.content
             }
-            .frame(width: geometry.size.width, height: self.maxHeight, alignment: .top)
+            .frame(width: geometry.size.width, height: geometry.size.height * self.maxHeightRatio, alignment: .top)
             .background(Color(.secondarySystemBackground))
             .cornerRadius(Constants.radius)
             .frame(height: geometry.size.height, alignment: .bottom)
-            .offset(y: max(self.offset + self.translation, 0))
+            .offset(y: max(self.offsetRatio * geometry.size.height + self.translation, 0))
             .animation(.interactiveSpring())
             .gesture(
                 DragGesture().updating(self.$translation) { value, state, _ in
                     state = value.translation.height
                 }.onEnded { value in
-                    let snapDistance = self.maxHeight * Constants.snapRatio
+                    let snapDistance = (self.maxHeightRatio - Constants.snapRatio) * geometry.size.height
                     guard abs(value.translation.height) > snapDistance else {
                         return
                     }
@@ -74,7 +74,7 @@ struct BottomSheetView<Content: View>: View {
 
 struct BottomSheetView_Previews: PreviewProvider {
     static var previews: some View {
-        BottomSheetView(isOpen: .constant(false), maxHeight: 600) {
+        BottomSheetView(isOpen: .constant(false), maxHeightRatio: 0.6) {
             Rectangle().fill(Color.red)
         }.edgesIgnoringSafeArea(.all)
     }

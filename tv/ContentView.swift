@@ -29,7 +29,6 @@ struct ContentView: View {
             )
             .environment(\.horizontalSizeClass, .compact)
     }
-
 }
 
 struct ContentView_Previews: PreviewProvider {

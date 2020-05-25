@@ -67,8 +67,6 @@ static NSMutableDictionary * gHistory;
     CGFloat             _minBufferedDuration;
     CGFloat             _maxBufferedDuration;
     BOOL                _buffered;
-    
-    BOOL                _savedIdleTimer;
 }
 
 @property (readwrite) BOOL playing;
@@ -217,7 +215,7 @@ static NSMutableDictionary * gHistory;
     
     [super viewDidAppear:animated];
         
-    _savedIdleTimer = [[UIApplication sharedApplication] isIdleTimerDisabled];
+    [[UIApplication sharedApplication] setIdleTimerDisabled: true];
     
     
     if (_decoder) {
@@ -252,7 +250,7 @@ static NSMutableDictionary * gHistory;
     }
     
         
-    [[UIApplication sharedApplication] setIdleTimerDisabled:_savedIdleTimer];
+    [[UIApplication sharedApplication] setIdleTimerDisabled: false];
     
     [_activityIndicatorView stopAnimating];
     _buffered = NO;

@@ -33,15 +33,17 @@ struct Player: View {
                         self.timer.connect().cancel()
                     }
             }
-            BottomSheetView(isOpen: $bottomSheetShown, maxHeight: 600) {
-                List(events.filter{$0.interval.end.compare(Date()) == .orderedDescending}, id: \.eventId) { event in
-                    EPGEventRow(event)
+            if((!navigationHidden || bottomSheetShown) && !events.isEmpty) {
+                BottomSheetView(isOpen: $bottomSheetShown, maxHeightRatio: 0.75) {
+                    List(events.filter { $0.interval.end.compare(Date()) == .orderedDescending }, id: \.eventId) { event in
+                        EPGEventRow(event)
+                    }
+                        .disabled(!bottomSheetShown)
                 }
-                .disabled(!bottomSheetShown)
             }
         }
             .navigationBarTitle("")
-            .navigationBarItems(trailing: ProgressBar(currentProgress: CGFloat(sliderValue)))
+          //  .navigationBarItems(trailing: ProgressBar(currentProgress: CGFloat(sliderValue)))
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             .background(Color.black)
             .edgesIgnoringSafeArea(.all)
